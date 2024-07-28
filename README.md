@@ -7,9 +7,10 @@ Performs scheduled file backups, compresses them and sends them to GDrive. Suppo
 1) Download Build files and place them in a preferred folder.
 2) Starts terminal with administrador privileges
 3) Run: sc create GDriveBackupBackgroundService binPath="C:\ProgramFolder\gdrive-backup-background-service.exe"
-4) Edit the appsettings.json configuration file by passing your gdrive and email details. Also specify which files you want to backup, as well as the time.
+4) Rename appsettings.sample.json to appsettings.json and edit this configuration file by passing your gdrive and email details. Also specify which files you want to backup, as well as the time.
 4) Open services.msc, search for GDriveBackupBackgroundService and start it.
-Appsettings sample
+
+# Appsettings.json sample
 
 ```
 {
