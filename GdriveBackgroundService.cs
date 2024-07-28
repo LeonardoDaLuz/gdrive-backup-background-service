@@ -62,6 +62,7 @@ public class GdriveBackgroundService : BackgroundService
         {
             await BackupFile(file.Origin, file.TargetFolder);
         }
+        //todo: Make backups for directories recursivelly
     }
     async Task CallCommandsBefore()
     {
