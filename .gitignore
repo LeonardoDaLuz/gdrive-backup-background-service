@@ -1,0 +1,65 @@
+# Compiled object files and libraries
+*.dll
+*.exe
+*.so
+*.dylib
+*.o
+*.obj
+appsettings.json
+appsettings.development.json
+# Build directories
+/bin/
+/obj/
+/out/
+
+# User-specific files
+*.user
+*.userosscache
+*.suo
+*.sln.docstates
+*.vscode/
+
+# Log files
+*.log
+*.tlog
+*.log.*
+
+# Package directories
+node_modules/
+packages/
+.vscode/
+
+# Temporary files
+*.tmp
+*.temp
+*.TMP
+*.TMP.*
+
+# Visual Studio specific
+.vs/
+.vscode/
+*.vscode
+.vscode-test/
+.vscode-docs/
+
+# Rider specific
+.idea/
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# NuGet packages
+*.nupkg
+# The packages folder can be ignored because of the presence of `package.lock.json` file.
+# It contains all the information needed to restore packages.
+packages/
+
+# Include auto-generated .NET Core directories
+# only if they contain actual content you need to commit.
+# Normally you should not commit bin and obj folders as they contain build output,
+# which should not be versioned.
+/bin/
+/obj/
+
+# Publish directory can be ignored if not committing the publish output.
+publish/

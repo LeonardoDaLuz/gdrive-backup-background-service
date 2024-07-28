@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\DEV\\gdrive-background-backup-service\\gdrive-background-backup-service.csproj": {}
+    "C:\\DEV\\gdrive-backup-background-service\\gdrive-background-backup-service.csproj": {}
   },
   "projects": {
-    "C:\\DEV\\gdrive-background-backup-service\\gdrive-background-backup-service.csproj": {
+    "C:\\DEV\\gdrive-backup-background-service\\gdrive-background-backup-service.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\DEV\\gdrive-background-backup-service\\gdrive-background-backup-service.csproj",
+        "projectUniqueName": "C:\\DEV\\gdrive-backup-background-service\\gdrive-background-backup-service.csproj",
         "projectName": "gdrive-background-backup-service",
-        "projectPath": "C:\\DEV\\gdrive-background-backup-service\\gdrive-background-backup-service.csproj",
+        "projectPath": "C:\\DEV\\gdrive-backup-background-service\\gdrive-background-backup-service.csproj",
         "packagesPath": "C:\\Users\\leoho\\.nuget\\packages\\",
-        "outputPath": "C:\\DEV\\gdrive-background-backup-service\\obj\\",
+        "outputPath": "C:\\DEV\\gdrive-backup-background-service\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -44,6 +44,20 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
+          "dependencies": {
+            "Google.Apis.Drive.v3": {
+              "target": "Package",
+              "version": "[1.68.0.3466, )"
+            },
+            "Microsoft.Extensions.Hosting": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "Microsoft.Extensions.Hosting.WindowsServices": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
