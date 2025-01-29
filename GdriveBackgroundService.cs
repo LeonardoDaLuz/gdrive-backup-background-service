@@ -26,21 +26,27 @@ public class GdriveBackgroundService : BackgroundService
             Console.WriteLine("Background service is stopping."));
 
 
-        var startsAt = new DateTime(
-            DateTime.UtcNow.Year,
-            DateTime.UtcNow.Month,
-            DateTime.UtcNow.Day,
-            settings.StartsAt.Hours,
-            settings.StartsAt.Minutes,
-            0, DateTimeKind.Utc)
-            .AddHours(-settings.StartsAt.timezone);
+        if (!settings.ForceToRunOnStartup)
+        {
+            var startsAt = new DateTime(
+                DateTime.UtcNow.Year,
+                DateTime.UtcNow.Month,
+                DateTime.UtcNow.Day,
+                settings.StartsAt.Hours,
+                settings.StartsAt.Minutes,
+                0, DateTimeKind.Utc)
+                .AddHours(-settings.StartsAt.timezone);
 
-        if (startsAt < DateTime.UtcNow) //Se o horario for menor do que agora, adicionar mais um dia.
-            startsAt = startsAt.AddDays(1);
-        var delayTimespan = startsAt - DateTime.UtcNow;
-        Console.WriteLine($"Waiting until {settings.StartsAt.Hours.ToString("D2")}:{settings.StartsAt.Minutes.ToString("D2")} ({delayTimespan.TotalMinutes.ToString("#")} minutes remaining)");
+            if (startsAt < DateTime.UtcNow) //Se o horario for menor do que agora, adicionar mais um dia.
+                startsAt = startsAt.AddDays(1);
+            var delayTimespan = startsAt - DateTime.UtcNow;
+            Console.WriteLine($"Waiting until {settings.StartsAt.Hours.ToString("D2")}:{settings.StartsAt.Minutes.ToString("D2")} ({delayTimespan.TotalMinutes.ToString("#")} minutes remaining)");
 
-        await Task.Delay(delayTimespan, stoppingToken);
+            await Task.Delay(delayTimespan, stoppingToken);
+        } else
+        {
+            settings.ForceToRunOnStartup = false;
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -76,7 +82,7 @@ public class GdriveBackgroundService : BackgroundService
         else if (Directory.Exists(task.Origin))
         {
             await SyncDirectories(task.TargetFolder, task.Origin);
-       
+
         }
     }
     async Task CallCommandsBefore(List<string> CommandsToCallBefore)

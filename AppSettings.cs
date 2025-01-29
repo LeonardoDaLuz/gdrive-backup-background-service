@@ -3,6 +3,7 @@
     public bool Enabled { get; set; }
     public List<FileDirectoryOriginTarget> FilesOrDirectory { get; set; }
     public GoogleDriveConfig GoogleDrive { get; set; }
+    public bool ForceToRunOnStartup { get;set; }
     public TimeConfig StartsAt { get; set; }
     public int BackupIntervalDays { get; set; }
     public List<string> SendEmailsTo { get; set; }
