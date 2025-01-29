@@ -43,7 +43,8 @@ public class GdriveBackgroundService : BackgroundService
             Console.WriteLine($"Waiting until {settings.StartsAt.Hours.ToString("D2")}:{settings.StartsAt.Minutes.ToString("D2")} ({delayTimespan.TotalMinutes.ToString("#")} minutes remaining)");
 
             await Task.Delay(delayTimespan, stoppingToken);
-        } else
+        }
+        else
         {
             settings.ForceToRunOnStartup = false;
         }
@@ -175,6 +176,8 @@ public class GdriveBackgroundService : BackgroundService
 
     async Task SyncDirectories(string rootDirInGdrive, string rootDirInDisc)
     {
+        if (rootDirInGdrive.EndsWith("/")) rootDirInGdrive = rootDirInGdrive.Substring(0, rootDirInGdrive.Length - 1);
+        if (rootDirInGdrive.StartsWith("/")) rootDirInGdrive = rootDirInGdrive.Substring(1, rootDirInGdrive.Length-1);
         Console.WriteLine($"Sincronizando diretório: {rootDirInDisc}");
         var fileList = Directory
             .GetFiles(rootDirInDisc)
@@ -182,13 +185,14 @@ public class GdriveBackgroundService : BackgroundService
         GC.Collect();
         foreach (var fileName in fileList)
         {
-            var filePathInDrive= Path.Combine(rootDirInGdrive, fileName);
+            var filePathInDrive = $"{rootDirInGdrive}/{fileName}";
             Console.WriteLine($"Checando se arquivo existe no drive: {filePathInDrive}");
-            var file = gDriveService.GetFileByPath(Path.Combine(rootDirInGdrive, fileName), false);
+            var file = gDriveService.GetFileByPath(filePathInDrive, false);
             if (file is null)
             {
-                var filePathInDisc = Path.Combine(rootDirInDisc , fileName);
-       
+                Console.WriteLine($"Arquivo não existe no gdrive: {filePathInDrive}");
+                var filePathInDisc = Path.Combine(rootDirInDisc, fileName);
+
                 var parentFolder = gDriveService.GetOrCreateFolderIfNotExistsByPath(rootDirInGdrive);
 
                 await gDriveService.BatchUploadFile(
@@ -201,7 +205,8 @@ public class GdriveBackgroundService : BackgroundService
                 );
                 GC.Collect();
             }
-            else {
+            else
+            {
                 Console.WriteLine($"Arquivo já existe no gdrive: {filePathInDrive}");
             }
         }
