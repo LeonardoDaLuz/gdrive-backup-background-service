@@ -75,7 +75,7 @@ public class GdriveBackgroundService : BackgroundService
         }
         else if (Directory.Exists(task.Origin))
         {
-            await SyncDirectories(task.Origin, task.TargetFolder);
+            await SyncDirectories(task.TargetFolder, task.Origin);
        
         }
     }
