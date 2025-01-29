@@ -90,6 +90,7 @@ public class GdriveBackgroundService : BackgroundService
     {
         foreach (var command in CommandsToCallBefore)
         {
+            Console.WriteLine("pwd:"+Directory.GetCurrentDirectory());
             Console.WriteLine("Calling command: " + command);
             // Configuração do processo
             ProcessStartInfo processStartInfo = new ProcessStartInfo
