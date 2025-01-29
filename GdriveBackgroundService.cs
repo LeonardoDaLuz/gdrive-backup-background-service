@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.IO.Compression;
+using static AppSettings;
 using static EmailService;
 
 
@@ -56,23 +57,37 @@ public class GdriveBackgroundService : BackgroundService
 
     async Task BackupNow()
     {
-        await CallCommandsBefore();
         gDriveService = new GoogleDriveService(settings.GoogleDrive);
-        foreach (var file in settings.Files)
+
+        foreach (var task in settings.FilesOrDirectory)
         {
-            await BackupFile(file.Origin, file.TargetFolder);
+            await RunTask(task);
         }
-        //todo: Make backups for directories recursivelly
     }
-    async Task CallCommandsBefore()
+    async Task RunTask(FileDirectoryOriginTarget task)
     {
-        foreach (var command in settings.CommandsToCallBefore)
+        if (task.CommandsToCallBefore != null && task.CommandsToCallBefore.Count > 0)
+            await CallCommandsBefore(task.CommandsToCallBefore);
+
+        if (File.Exists(task.Origin))
+        {
+            await BackupFile(task.Origin, task.TargetFolder);
+        }
+        else if (Directory.Exists(task.Origin))
+        {
+            await SyncDirectories(task.Origin, task.TargetFolder);
+       
+        }
+    }
+    async Task CallCommandsBefore(List<string> CommandsToCallBefore)
+    {
+        foreach (var command in CommandsToCallBefore)
         {
             Console.WriteLine("Calling command: " + command);
             // Configuração do processo
             ProcessStartInfo processStartInfo = new ProcessStartInfo
             {
-                FileName = "cmd.exe",
+                FileName = Environment.OSVersion.Platform == PlatformID.Win32NT ? "cmd.exe" : "/bin/bash",
                 Arguments = $"/C {command}",
                 RedirectStandardOutput = true, // Redireciona a saída padrão
                 RedirectStandardError = true,  // Redireciona os erros padrão
@@ -100,7 +115,7 @@ public class GdriveBackgroundService : BackgroundService
                 process.BeginErrorReadLine();
 
                 // Espera o processo terminar
-                process.WaitForExit();
+                await process.WaitForExitAsync();
 
                 // Exibe a saída e os erros
                 Console.WriteLine("Command execution finished");
@@ -149,6 +164,45 @@ public class GdriveBackgroundService : BackgroundService
         using (var arquivoZip = ZipFile.Open(caminhoArquivoZipado, ZipArchiveMode.Create))
         {
             arquivoZip.CreateEntryFromFile(caminhoArquivo, Path.GetFileName(caminhoArquivo));
+        }
+    }
+
+    async Task SyncDirectories(string rootDirInGdrive, string rootDirInDisc)
+    {
+        Console.WriteLine($"Sincronizando diretório: {rootDirInDisc}");
+        var fileList = Directory
+            .GetFiles(rootDirInDisc)
+            .Select(x => x.Replace(rootDirInDisc, "").Replace("\\", "").Replace("/", ""));
+        GC.Collect();
+        foreach (var fileName in fileList)
+        {
+            var file = gDriveService.GetFileByPath(rootDirInGdrive + "/" + fileName, false);
+            if (file is null)
+            {
+                var parentFolder = gDriveService.GetOrCreateFolderIfNotExistsByPath(rootDirInGdrive);
+                var filePathInDisc = rootDirInDisc + "/" + fileName;
+
+                await gDriveService.BatchUploadFile(
+                    filePathInDisc,
+                    fileName,
+                    "",
+                    parentFolder.Id,
+                    rootDirInGdrive,
+                    "Backup automático"
+                );
+                GC.Collect();
+            }
+            else { }
+        }
+
+        var dirList = Directory
+            .GetDirectories(rootDirInDisc)
+            .Select(x => x.Replace(rootDirInDisc, "").Replace("\\", "").Replace("/", ""));
+
+        foreach (var folderName in dirList)
+        {
+            var gDriveFolder = gDriveService.GetOrCreateFolderIfNotExistsByPath(rootDirInGdrive + "/" + folderName, false);
+            await SyncDirectories(rootDirInGdrive + "/" + folderName, rootDirInDisc + "/" + folderName);
         }
     }
 }
