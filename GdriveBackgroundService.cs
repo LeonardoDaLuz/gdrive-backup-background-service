@@ -178,15 +178,18 @@ public class GdriveBackgroundService : BackgroundService
         Console.WriteLine($"Sincronizando diretório: {rootDirInDisc}");
         var fileList = Directory
             .GetFiles(rootDirInDisc)
-            .Select(x => x.Replace(rootDirInDisc, "").Replace("\\", "").Replace("/", ""));
+            .Select(x => Path.GetFileName(x));
         GC.Collect();
         foreach (var fileName in fileList)
         {
-            var file = gDriveService.GetFileByPath(rootDirInGdrive + "/" + fileName, false);
+            var filePathInDrive= Path.Combine(rootDirInGdrive, fileName);
+            Console.WriteLine($"Checando se arquivo existe no drive: {filePathInDrive}");
+            var file = gDriveService.GetFileByPath(Path.Combine(rootDirInGdrive, fileName), false);
             if (file is null)
             {
+                var filePathInDisc = Path.Combine(rootDirInDisc , fileName);
+       
                 var parentFolder = gDriveService.GetOrCreateFolderIfNotExistsByPath(rootDirInGdrive);
-                var filePathInDisc = rootDirInDisc + "/" + fileName;
 
                 await gDriveService.BatchUploadFile(
                     filePathInDisc,
@@ -198,7 +201,9 @@ public class GdriveBackgroundService : BackgroundService
                 );
                 GC.Collect();
             }
-            else { }
+            else {
+                Console.WriteLine($"Arquivo já existe no gdrive: {filePathInDrive}");
+            }
         }
 
         var dirList = Directory
