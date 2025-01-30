@@ -87,6 +87,7 @@ public class GdriveBackgroundService : BackgroundService
         {
             try
             {
+                Console.WriteLine("Backup directory");
                 await BackupFile(task);
             }
             catch
@@ -98,6 +99,7 @@ public class GdriveBackgroundService : BackgroundService
         {
             try
             {
+                Console.WriteLine("Backup directory");
                 await BackupDirectory(task);
             }
             catch
