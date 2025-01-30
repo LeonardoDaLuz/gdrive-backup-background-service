@@ -317,6 +317,7 @@ public class GoogleDriveService
         public string MimeType;
         public string Name;
         public IList<string> Parents;
+        public Google.Apis.Drive.v3.Data.File file;
 
         public GFileInfo() { }
 
@@ -325,6 +326,7 @@ public class GoogleDriveService
             this.Id = file.Id;
             this.MimeType = file.MimeType;
             this.Name = file.Name;
+            this.file = file;
             if (file.Parents is null)
             {
                 this.Parents = new List<string>();

@@ -3,7 +3,7 @@
     public bool Enabled { get; set; }
     public List<FileDirectoryOriginTarget> FilesOrDirectory { get; set; }
     public GoogleDriveConfig GoogleDrive { get; set; }
-    public bool ForceToRunOnStartup { get;set; }
+    public bool ForceToRunOnStartup { get; set; }
     public TimeConfig StartsAt { get; set; }
     public int BackupIntervalDays { get; set; }
     public List<string> SendEmailsTo { get; set; }
@@ -13,6 +13,8 @@
         public string Origin { get; set; }
         public string TargetFolder { get; set; }
         public List<string> CommandsToCallBefore { get; set; } = new();
+        public string EmailBody { get; set; }
+        public string EmailTitle { get; set; }
     }
     public class TimeConfig
     {
@@ -20,6 +22,6 @@
         public int Minutes { get; set; }
         public float timezone { get; set; }
     }
-   
+
 
 }

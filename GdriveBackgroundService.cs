@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using static AppSettings;
 using static EmailService;
+using static GoogleDriveService;
 
 
 public class GdriveBackgroundService : BackgroundService
@@ -78,7 +79,7 @@ public class GdriveBackgroundService : BackgroundService
 
         if (File.Exists(task.Origin))
         {
-            await BackupFile(task.Origin, task.TargetFolder);
+            await BackupFile(task);
         }
         else if (Directory.Exists(task.Origin))
         {
@@ -90,13 +91,13 @@ public class GdriveBackgroundService : BackgroundService
     {
         foreach (var command in CommandsToCallBefore)
         {
-            Console.WriteLine("pwd:"+Directory.GetCurrentDirectory());
+            Console.WriteLine("pwd:" + Directory.GetCurrentDirectory());
             Console.WriteLine("Calling command: " + command);
             // Configuração do processo
             ProcessStartInfo processStartInfo = new ProcessStartInfo
             {
                 FileName = Environment.OSVersion.Platform == PlatformID.Win32NT ? "cmd.exe" : "/bin/bash",
-                Arguments = Environment.OSVersion.Platform == PlatformID.Win32NT? $"/C {command}":$"-c \"{command}\"",
+                Arguments = Environment.OSVersion.Platform == PlatformID.Win32NT ? $"/C {command}" : $"-c \"{command}\"",
                 RedirectStandardOutput = true, // Redireciona a saída padrão
                 RedirectStandardError = true,  // Redireciona os erros padrão
                 UseShellExecute = false,       // Não usa o shell do sistema para executar
@@ -131,8 +132,10 @@ public class GdriveBackgroundService : BackgroundService
 
         }
     }
-    async Task BackupFile(string originPath, string targetPath)
+    async Task BackupFile(FileDirectoryOriginTarget task)
     {
+        string originPath = task.Origin;
+        string targetPath = task.TargetFolder;
         if (!File.Exists(originPath))
         {
             Console.Write("File not found: " + originPath);
@@ -149,21 +152,25 @@ public class GdriveBackgroundService : BackgroundService
         File.Delete(copyFilePath);
         var uploadedFile = await gDriveService.UploadFile(copyFilePath + ".zip", targetPath);
         if (uploadedFile is not null)
+            await SendEmail(task, uploadedFile);
+    }
+
+    async Task SendEmail(FileDirectoryOriginTarget task, Google.Apis.Drive.v3.Data.File uploadedFile)
+    {
+        if (uploadedFile is not null)
         {
             var mailService = new EmailService(settings.EmailSettings);
             Console.WriteLine($"Sending backup email");
             await mailService.SendEmailAsync(
                 new EmailRequest(
                    toEmail: settings.SendEmailsTo,
-                   subject: $"Backup {Path.GetFileName(originPath)} - " + DateTime.UtcNow.AddHours(settings.StartsAt.timezone).ToString("dd/MM/yyyy HH:mm"),
-                   body: $@"<h1>Backup do banco de dados realizado com sucesso!</h1>
+                   subject: task.EmailTitle ?? "Backup",
+                   body: (task.EmailBody ?? @"<h1>Backup realizado com sucesso!</h1>
                              <p>Se está tendo problemas em visualizar este arquivo é porque provavelmente você não tem permissão de acesso à pasta do google drive.</p>
-                             <a href='https://drive.google.com/file/d/{uploadedFile.Id}/view?usp=sharing'>Clique aqui para baixar o arquivo</a>
-                             ",
+                             <a href='https://drive.google.com/file/d/{uploadedFile.Id}/view?usp=sharing'>Clique aqui para baixar o arquivo</a>").Replace("{fileId}", uploadedFile.Id),
                    isHtml: true
                 )
             );
-
         }
     }
     public static void CompressFile(string caminhoArquivo, string caminhoArquivoZipado)
@@ -174,16 +181,21 @@ public class GdriveBackgroundService : BackgroundService
             arquivoZip.CreateEntryFromFile(caminhoArquivo, Path.GetFileName(caminhoArquivo));
         }
     }
-
-    async Task SyncDirectories(string rootDirInGdrive, string rootDirInDisc)
+    async Task BackupDirectory(FileDirectoryOriginTarget task)
+    {
+        var parentFolder = await SyncDirectories(task.TargetFolder, task.Origin);
+        await SendEmail(task, parentFolder.file);
+    }
+    async Task<GFileInfo> SyncDirectories(string rootDirInGdrive, string rootDirInDisc)
     {
         if (rootDirInGdrive.EndsWith("/")) rootDirInGdrive = rootDirInGdrive.Substring(0, rootDirInGdrive.Length - 1);
-        if (rootDirInGdrive.StartsWith("/")) rootDirInGdrive = rootDirInGdrive.Substring(1, rootDirInGdrive.Length-1);
+        if (rootDirInGdrive.StartsWith("/")) rootDirInGdrive = rootDirInGdrive.Substring(1, rootDirInGdrive.Length - 1);
         Console.WriteLine($"Sincronizando diretório: {rootDirInDisc}");
         var fileList = Directory
             .GetFiles(rootDirInDisc)
             .Select(x => Path.GetFileName(x));
         GC.Collect();
+        var parentFolder = gDriveService.GetOrCreateFolderIfNotExistsByPath(rootDirInGdrive);
         foreach (var fileName in fileList)
         {
             var filePathInDrive = $"{rootDirInGdrive}/{fileName}";
@@ -194,7 +206,7 @@ public class GdriveBackgroundService : BackgroundService
                 Console.WriteLine($"Arquivo não existe no gdrive: {filePathInDrive}");
                 var filePathInDisc = Path.Combine(rootDirInDisc, fileName);
 
-                var parentFolder = gDriveService.GetOrCreateFolderIfNotExistsByPath(rootDirInGdrive);
+
 
                 await gDriveService.BatchUploadFile(
                     filePathInDisc,
@@ -221,5 +233,6 @@ public class GdriveBackgroundService : BackgroundService
             var gDriveFolder = gDriveService.GetOrCreateFolderIfNotExistsByPath(rootDirInGdrive + "/" + folderName, false);
             await SyncDirectories(rootDirInGdrive + "/" + folderName, rootDirInDisc + "/" + folderName);
         }
+        return parentFolder;
     }
 }
