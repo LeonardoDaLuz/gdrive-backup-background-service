@@ -170,7 +170,7 @@ public class GdriveBackgroundService : BackgroundService
         Console.WriteLine($"Deleting copy file");
         File.Delete(copyFilePath);
         var uploadedFile = await gDriveService.UploadFile(copyFilePath + ".zip", targetPath);
-        if (uploadedFile is not null)
+        if (uploadedFile != null)
             await SendEmail(task, uploadedFile);
     }
 
@@ -178,8 +178,8 @@ public class GdriveBackgroundService : BackgroundService
     {
         if (uploadedFile is not null)
         {
-            var mailService = new EmailService(settings.EmailSettings);
             Console.WriteLine($"Sending backup email");
+            var mailService = new EmailService(settings.EmailSettings);
             await mailService.SendEmailAsync(
                 new EmailRequest(
                    toEmail: settings.SendEmailsTo,
