@@ -83,6 +83,8 @@ public class GdriveBackgroundService : BackgroundService
         {
             Console.Error.WriteLine("Fail to run command before");
         }
+        Console.WriteLine("Origin: " + task.Origin);
+        Console.WriteLine("is directory: " + Directory.Exists(task.Origin));
         if (File.Exists(task.Origin))
         {
             try
