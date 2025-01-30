@@ -74,17 +74,36 @@ public class GdriveBackgroundService : BackgroundService
     }
     async Task RunTask(FileDirectoryOriginTarget task)
     {
-        if (task.CommandsToCallBefore != null && task.CommandsToCallBefore.Count > 0)
-            await CallCommandsBefore(task.CommandsToCallBefore);
-
+        try
+        {
+            if (task.CommandsToCallBefore != null && task.CommandsToCallBefore.Count > 0)
+                await CallCommandsBefore(task.CommandsToCallBefore);
+        }
+        catch
+        {
+            Console.Error.WriteLine("Fail to run command before");
+        }
         if (File.Exists(task.Origin))
         {
-            await BackupFile(task);
+            try
+            {
+                await BackupFile(task);
+            }
+            catch
+            {
+                Console.Error.WriteLine("fail to backup file");
+            }
         }
         else if (Directory.Exists(task.Origin))
         {
-            await SyncDirectories(task.TargetFolder, task.Origin);
-
+            try
+            {
+                await BackupDirectory(task);
+            }
+            catch
+            {
+                Console.Error.WriteLine("fail to backup directory");
+            }
         }
     }
     async Task CallCommandsBefore(List<string> CommandsToCallBefore)
