@@ -89,7 +89,7 @@ public class GdriveBackgroundService : BackgroundService
         {
             try
             {
-                Console.WriteLine("Backup files: "+task.Origin);
+                Console.WriteLine("Backup files: " + task.Origin);
                 await BackupFile(task);
             }
             catch
@@ -175,10 +175,10 @@ public class GdriveBackgroundService : BackgroundService
         File.Delete(copyFilePath);
         var uploadedFile = await gDriveService.UploadFile(copyFilePath + ".zip", targetPath);
         if (uploadedFile != null)
-            await SendEmail(task, uploadedFile);
+            await SendEmail(task, uploadedFile, false);
     }
 
-    async Task SendEmail(FileDirectoryOriginTarget task, Google.Apis.Drive.v3.Data.File uploadedFile)
+    async Task SendEmail(FileDirectoryOriginTarget task, Google.Apis.Drive.v3.Data.File uploadedFile, bool folder)
     {
         if (uploadedFile is not null)
         {
@@ -188,9 +188,9 @@ public class GdriveBackgroundService : BackgroundService
                 new EmailRequest(
                    toEmail: settings.SendEmailsTo,
                    subject: task.EmailTitle ?? "Backup",
-                   body: (task.EmailBody ?? @"<h1>Backup realizado com sucesso!</h1>
+                   body: @$"<h1>Backup realizado com sucesso!</h1>
                              <p>Se está tendo problemas em visualizar este arquivo é porque provavelmente você não tem permissão de acesso à pasta do google drive.</p>
-                             <a href='https://drive.google.com/file/d/{uploadedFile.Id}/view?usp=sharing'>Clique aqui para baixar o arquivo</a>").Replace("{fileId}", uploadedFile.Id),
+                             <a href='https://drive.google.com/{(folder ? "folder" : "file")}/d/{uploadedFile.Id}/view?usp=sharing'>Clique aqui para baixar o arquivo</a>",
                    isHtml: true
                 )
             );
@@ -207,7 +207,7 @@ public class GdriveBackgroundService : BackgroundService
     async Task BackupDirectory(FileDirectoryOriginTarget task)
     {
         var parentFolder = await SyncDirectories(task.TargetFolder, task.Origin);
-        await SendEmail(task, parentFolder.file);
+        await SendEmail(task, parentFolder.file, true);
     }
     async Task<GFileInfo> SyncDirectories(string rootDirInGdrive, string rootDirInDisc)
     {
