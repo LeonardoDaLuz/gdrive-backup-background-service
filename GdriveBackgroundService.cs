@@ -96,7 +96,7 @@ public class GdriveBackgroundService : BackgroundService
             ProcessStartInfo processStartInfo = new ProcessStartInfo
             {
                 FileName = Environment.OSVersion.Platform == PlatformID.Win32NT ? "cmd.exe" : "/bin/bash",
-                Arguments = Environment.OSVersion.Platform == PlatformID.Win32NT? $"/C {command}":$"-c {command}",
+                Arguments = Environment.OSVersion.Platform == PlatformID.Win32NT? $"/C {command}":$"-c \"{command}\"",
                 RedirectStandardOutput = true, // Redireciona a saída padrão
                 RedirectStandardError = true,  // Redireciona os erros padrão
                 UseShellExecute = false,       // Não usa o shell do sistema para executar
