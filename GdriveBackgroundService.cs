@@ -87,12 +87,12 @@ public class GdriveBackgroundService : BackgroundService
         {
             try
             {
-                Console.WriteLine("Backup directory");
+                Console.WriteLine("Backup files: "+task.Origin);
                 await BackupFile(task);
             }
             catch
             {
-                Console.Error.WriteLine("fail to backup file");
+                Console.Error.WriteLine("fail to backup files: " + task.Origin);
             }
         }
         else if (Directory.Exists(task.Origin))
