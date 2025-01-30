@@ -99,7 +99,7 @@ public class GdriveBackgroundService : BackgroundService
         {
             try
             {
-                Console.WriteLine("Backup directory");
+                Console.WriteLine("Backup directory: " + task.Origin);
                 await BackupDirectory(task);
             }
             catch
