@@ -12,9 +12,20 @@ public class GdriveBackgroundService : BackgroundService
 {
     AppSettings settings;
     GoogleDriveService gDriveService;
+    SemaphoreSlim semaphore;
     public GdriveBackgroundService(IOptions<AppSettings> settings)
     {
         this.settings = settings.Value;
+
+        if (!this.settings.ForceToRunOnStartup)
+        {
+            Task.Run(async () =>
+            {
+                await Task.Delay(1000);
+                await BackupNow();
+            });
+
+        }
     }
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -26,29 +37,21 @@ public class GdriveBackgroundService : BackgroundService
         stoppingToken.Register(() =>
             Console.WriteLine("Background service is stopping."));
 
+        var startsAt = new DateTime(
+            DateTime.UtcNow.Year,
+            DateTime.UtcNow.Month,
+            DateTime.UtcNow.Day,
+            settings.StartsAt.Hours,
+            settings.StartsAt.Minutes,
+            0, DateTimeKind.Utc)
+            .AddHours(-settings.StartsAt.timezone);
 
-        if (!settings.ForceToRunOnStartup)
-        {
-            var startsAt = new DateTime(
-                DateTime.UtcNow.Year,
-                DateTime.UtcNow.Month,
-                DateTime.UtcNow.Day,
-                settings.StartsAt.Hours,
-                settings.StartsAt.Minutes,
-                0, DateTimeKind.Utc)
-                .AddHours(-settings.StartsAt.timezone);
+        if (startsAt < DateTime.UtcNow) //Se o horario for menor do que agora, adicionar mais um dia.
+            startsAt = startsAt.AddDays(1);
+        var delayTimespan = startsAt - DateTime.UtcNow;
+        Console.WriteLine($"Waiting until {settings.StartsAt.Hours.ToString("D2")}:{settings.StartsAt.Minutes.ToString("D2")} ({delayTimespan.TotalMinutes.ToString("#")} minutes remaining)");
 
-            if (startsAt < DateTime.UtcNow) //Se o horario for menor do que agora, adicionar mais um dia.
-                startsAt = startsAt.AddDays(1);
-            var delayTimespan = startsAt - DateTime.UtcNow;
-            Console.WriteLine($"Waiting until {settings.StartsAt.Hours.ToString("D2")}:{settings.StartsAt.Minutes.ToString("D2")} ({delayTimespan.TotalMinutes.ToString("#")} minutes remaining)");
-
-            await Task.Delay(delayTimespan, stoppingToken);
-        }
-        else
-        {
-            settings.ForceToRunOnStartup = false;
-        }
+        await Task.Delay(delayTimespan, stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -65,11 +68,19 @@ public class GdriveBackgroundService : BackgroundService
 
     async Task BackupNow()
     {
-        gDriveService = new GoogleDriveService(settings.GoogleDrive);
-
-        foreach (var task in settings.FilesOrDirectory)
+        await semaphore.WaitAsync();
+        try
         {
-            await RunTask(task);
+            gDriveService = new GoogleDriveService(settings.GoogleDrive);
+
+            foreach (var task in settings.FilesOrDirectory)
+            {
+                await RunTask(task);
+            }
+        }
+        finally
+        {
+            semaphore.Release();
         }
     }
     async Task RunTask(FileDirectoryOriginTarget task)
@@ -139,7 +150,22 @@ public class GdriveBackgroundService : BackgroundService
                     Console.WriteLine(e.Data);
                     Console.ForegroundColor = defaultColor;
                 };
+                process.OutputDataReceived += (sender, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                        Console.WriteLine(e.Data);
+                };
 
+                process.ErrorDataReceived += (sender, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                    {
+                        var defaultColor = Console.ForegroundColor;
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine(e.Data);
+                        Console.ForegroundColor = defaultColor;
+                    }
+                };
                 process.Start();
 
                 // Inicia a leitura assíncrona das saídas
