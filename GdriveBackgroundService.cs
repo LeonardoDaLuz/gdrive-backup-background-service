@@ -12,7 +12,7 @@ public class GdriveBackgroundService : BackgroundService
 {
     AppSettings settings;
     GoogleDriveService gDriveService;
-    SemaphoreSlim semaphore;
+    SemaphoreSlim semaphore = new SemaphoreSlim(1);
     bool initialized = false;
     public GdriveBackgroundService(IOptions<AppSettings> settings)
     {
