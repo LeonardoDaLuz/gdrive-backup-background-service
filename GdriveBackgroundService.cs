@@ -13,23 +13,22 @@ public class GdriveBackgroundService : BackgroundService
     AppSettings settings;
     GoogleDriveService gDriveService;
     SemaphoreSlim semaphore;
+    bool initialized = false;
     public GdriveBackgroundService(IOptions<AppSettings> settings)
     {
         this.settings = settings.Value;
-
-        if (!this.settings.ForceToRunOnStartup)
-        {
-            Task.Run(async () =>
-            {
-                await Task.Delay(1000);
-                await BackupNow();
-            });
-
-        }
     }
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await Task.Delay(1000, stoppingToken); //Wait for background service default console log;
+        if (!initialized)
+        {
+            initialized = true;
+            if(settings.ForceToRunOnStartup)
+            {
+                await BackupNow();
+            }
+        }
         Console.WriteLine("Background service is starting.");
         if (settings.BackupIntervalDays < 0.1)
             throw new Exception("Interval not allowed");
