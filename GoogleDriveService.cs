@@ -4,7 +4,9 @@ using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
 using Google.Apis.Util.Store;
+using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Threading.Tasks;
 using static Google.Apis.Drive.v3.DriveService;
 
 /**
@@ -13,18 +15,32 @@ using static Google.Apis.Drive.v3.DriveService;
 public class GoogleDriveService
 {
     DateTime expireTime;
-    TokenResponse tokenResponse;
+    TokenResponse? tokenResponse;
     string client_secret;
     string refresh_token;
     string client_id;
     string applicationName;
     string username;
     public bool justSimulate { get; set; }
+    public static bool EnableLog;
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _folderLocks = new();
 
 
     public GoogleDriveService(GoogleDriveConfig config)
     {
         var fileBackupConfig = config;
+        if (string.IsNullOrWhiteSpace(fileBackupConfig.ClientSecret))
+            throw new FormatException("Client secret not configured");
+
+        if (string.IsNullOrWhiteSpace(fileBackupConfig.RefreshToken))
+            throw new FormatException("Client secret not configured");
+
+        if (string.IsNullOrWhiteSpace(fileBackupConfig.ClientId))
+            throw new FormatException("Client secret not configured");
+        if (string.IsNullOrWhiteSpace(fileBackupConfig.ApplicationName))
+            throw new FormatException("Client secret not configured");
+        if (string.IsNullOrWhiteSpace(fileBackupConfig.GDriveEmail))
+            throw new FormatException("Client secret not configured");
 
         client_secret = fileBackupConfig.ClientSecret;
         refresh_token = fileBackupConfig.RefreshToken;
@@ -53,6 +69,7 @@ public class GoogleDriveService
 
             string responseBody = await response.Content.ReadAsStringAsync();
             var results = JsonSerializer.Deserialize<RefreshTokenResponse>(responseBody);
+            if (results == null) throw new Exception("Error on refreshtoken");
             expireTime = DateTime.UtcNow.AddSeconds(results.expires_in);
             return results;
         }
@@ -67,14 +84,14 @@ public class GoogleDriveService
         string error_description
     );
 
-    private DriveService service_;
+    private DriveService? _service;
 
     private async Task<DriveService> GetService()
     {
 
-        if (service_ is not null)
+        if (_service is not null)
         {
-            return service_;
+            return _service;
         }
         if (tokenResponse is null || DateTime.UtcNow > expireTime.AddSeconds(-60 * 10))
         {
@@ -96,38 +113,57 @@ public class GoogleDriveService
         var service = new DriveService(
             new BaseClientService.Initializer { HttpClientInitializer = credential, ApplicationName = applicationName }
         );
-        service_ = service;
+        _service = service;
 
         return service;
     }
 
     public async Task<Google.Apis.Drive.v3.Data.File> CreateFolder(string parent, string folderName)
     {
+
         var service = await GetService();
         var driveFolder = new Google.Apis.Drive.v3.Data.File();
         driveFolder.Name = folderName;
         driveFolder.MimeType = "application/vnd.google-apps.folder";
         driveFolder.Parents = new string[] { parent };
-        var command = service.Files.Create(driveFolder);
-        var file = command.Execute();
 
-        if (allFileScanned is not null)
+        var semaphore = _folderLocks.GetOrAdd($"{parent}{"//\\"}{folderName}", _ => new SemaphoreSlim(1, 1));
+
+        await semaphore.WaitAsync();
+        try
         {
-            file.Parents = new List<string>() { parent };
-            allFileScanned.Add(file.Id, new(file));
+            GFileInfo? folderInfo;
+            if (fileFolderCache.TryGetValue($"{parent}//\\{folderName}", out folderInfo))
+            {
+                return folderInfo.file;
+            }
+
+            // Primeiro verifica se a pasta já existe
+            var command = service.Files.Create(driveFolder);
+            var file = await command.ExecuteAsync();
+
+            if (fileFolderCache is not null)
+            {
+                file.Parents = new List<string>() { parent };
+                fileFolderCache.TryAdd($"{parent}//\\{file.Name}", new(file));
+            }
+            return file;
         }
-        return file;
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
-    public string ___rootFolderId { get; private set; }
+    public string? ___rootFolderId { get; private set; }
 
-    string getRootFolderId()
+    async Task<string> getRootFolderId()
     {
         if (___rootFolderId is not null)
         {
             return ___rootFolderId;
         }
-        var service = GetService().GetAwaiter().GetResult();
+        var service = await GetService();
         FilesResource.ListRequest request = service.Files.List();
         request.Q = "mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false";
         request.Fields = "files(id,name,parents)";
@@ -147,18 +183,18 @@ public class GoogleDriveService
 
     public async Task<Google.Apis.Drive.v3.Data.File> UploadFile(string origin, string target)
     {
-        var targetFolder = GetOrCreateFolderIfNotExistsByPath(target);
-        Google.Apis.Drive.v3.Data.File uploadedFile = null;
+        var targetFolder = await GetOrCreateFolderIfNotExistsByPath(target);
+        Google.Apis.Drive.v3.Data.File? uploadedFile = null;
         using (FileStream fileStream = new FileStream(origin, FileMode.Open, FileAccess.Read))
         {
             uploadedFile = await UploadFile(
                 fileStream,
                 Path.GetFileName(origin),
                 "application/zip",
-                targetFolder.Id,
+                targetFolder.fileInfo.Id,
                 "Backup automático"
             );
-            Console.WriteLine("File sended");
+            WriteLine("File sended");
         }
         return uploadedFile;
     }
@@ -217,18 +253,18 @@ public class GoogleDriveService
             {
                 if (justSimulate)
                 {
-                    Console.WriteLine("Finished upload (Fake): " + gDriveFolderPath + "/" + fileName);
+                    WriteLine("Finished upload (Fake): " + gDriveFolderPath + "/" + fileName);
                     return new();
                 }
                 try
                 {
                     var result = await UploadFile(fs, fileName, fileMime, folderId, fileDescription);
-                    Console.WriteLine("Finished upload: " + gDriveFolderPath + "/" + fileName);
+                    WriteLine("Finished upload: " + gDriveFolderPath + "/" + fileName);
                     return result;
                 }
                 catch (Exception exception)
                 {
-                    Console.WriteLine(
+                    WriteLine(
                         "Failed to upload: " + gDriveFolderPath + "/" + fileName + " : " + exception.ToString()
                     );
                     return new();
@@ -258,37 +294,46 @@ public class GoogleDriveService
     }
 
     /// <summary>
-    /// Puxa do gdrive toda lista de pastas e arquivos. Isto é feito por loops porque o gdrive nao deixa fazer isto de uma vez. Isto é um workaround.
+    /// Puxa do gdrive toda lista de pastas e arquivos. 
+    /// Isto é feito por loops porque o gdrive nao deixa fazer isto de uma vez. Isto é um workaround.
+    /// Mas não funciona bem porque geralmente tem muito arquivo pra fazer esse cache pois tem
+    /// limitação de 500 por vez, e o google começa a recusar conexão se vc fizer request demais.
     /// </summary>
-    public void CacheAllDir()
+    public async Task CacheAllDir()
     {
-        Console.WriteLine("Getting all file info cache from GDrive");
-        var service = GetService().GetAwaiter().GetResult();
-        string pageToken = null;
+        WriteLine("Getting all file info cache from GDrive");
+        var service = await GetService();
+        string? pageToken = null;
         int page = 0;
         do
         {
             var request = service.Files.List();
-            request.Q = $"trashed=false";
+            request.Q = "mimeType='application/vnd.google-apps.folder' and trashed=false";
             request.Fields = "nextPageToken, files(id, name,parents,mimeType)";
             request.PageToken = pageToken;
             request.PageSize = 500;
 
             // Executa a solicitação e itera pelos resultados
-            var response = request.Execute();
+            try
+            {
+                var response = await request.ExecuteAsync();
+                pageToken = response.NextPageToken;
+                AddToCache(response.Files);
+                page++;
+                WriteLine("Loop " + page);
+            }
+            catch (Google.GoogleApiException ex)
+            {
+                Console.WriteLine("Error on cache: " + ex.ToString());
+            }
 
-            pageToken = response.NextPageToken;
-            AddToCache(response.Files);
-            page++;
-            Console.WriteLine("Loop " + page);
         } while (!string.IsNullOrEmpty(pageToken));
-        Console.WriteLine("Allfile Infos Obtained");
+        WriteLine("Allfile Infos Obtained");
     }
 
-    public List<GFileInfo> Dir(string folderId)
+    public async Task<List<GFileInfo>> Dir(string folderId)
     {
-        Console.WriteLine("Dir");
-        var service = GetService().GetAwaiter().GetResult();
+        var service = await GetService();
         var request = service.Files.List();
         request.PageSize = 500;
         if (folderId is null)
@@ -308,7 +353,8 @@ public class GoogleDriveService
 
         AddToCache(response.Files);
 
-        return response.Files.Select(x => (new GFileInfo(x))).ToList();
+        var result = response.Files.Select(x => (new GFileInfo(x))).ToList();
+        return result;
     }
 
     public class GFileInfo
@@ -319,7 +365,6 @@ public class GoogleDriveService
         public IList<string> Parents;
         public Google.Apis.Drive.v3.Data.File file;
 
-        public GFileInfo() { }
 
         public GFileInfo(Google.Apis.Drive.v3.Data.File file)
         {
@@ -338,95 +383,102 @@ public class GoogleDriveService
         }
     }
 
-    Dictionary<string, GFileInfo> allFileScanned { get; set; } = new();
+    ConcurrentDictionary<string, GFileInfo> fileFolderCache { get; set; } = new();
 
     public void AddToCache(GFileInfo file)
     {
-        if (file.Parents is null)
+
+        if (file.Parents == null)
         {
-            throw new Exception("parent cannot be null");
+            fileFolderCache.TryAdd($"root//\\{file.Name}", file);
         }
-        if (allFileScanned.Count > 100)
+        else
         {
-            //allFileScanned.RemoveAt(0);
+            foreach (var parent in file.Parents)
+            {
+                fileFolderCache.TryAdd($"{parent}//\\{file.Name}", file);
+            }
         }
-        if (file is null)
-        {
-            throw new Exception();
-        }
-        if (!allFileScanned.ContainsKey(file.Id))
-            allFileScanned.Add(file.Id, file);
     }
 
     public void AddToCache(IList<Google.Apis.Drive.v3.Data.File> files)
     {
-        var converted = files.Select(x => new GFileInfo()
-        {
-            Id = x.Id,
-            Name = x.Name,
-            Parents = x.Parents,
-            MimeType = x.MimeType
-        });
-        if (files.Contains(null))
-        {
-            throw new Exception();
-        }
+
         foreach (var file in files)
         {
-            if (!allFileScanned.ContainsKey(file.Id))
-                allFileScanned.Add(file.Id, new(file));
+            if (file.Parents == null)
+            {
+                fileFolderCache.TryAdd($"root//\\{file.Name}", new(file));
+            }
+            else
+            {
+                foreach (var parentId in file.Parents)
+                {
+                    fileFolderCache.TryAdd($"{parentId}//\\{file.Name}", new(file));
+                }
+            }
+
         }
     }
 
-    public GFileInfo GetOrCreateFolderIfNotExistsByPath(string path, bool updateFileTree = false)
+    public async Task<(GFileInfo fileInfo, bool created)> GetOrCreateFolderIfNotExistsByPath(string path, bool updateFileTree = false)
     {
         if (path.StartsWith("/"))
             path = path.Substring(1);
-        
+
         var directories = path.Split("/");
-        Console.WriteLine("path ->" + path);
-        var parentId = getRootFolderId();
-        ;
-        GFileInfo currentCursor = null;
+
+        var parentId = await getRootFolderId();
+
+        GFileInfo? currentCursor = null;
         bool created = false;
-        bool foundByGdrive = false;
-        // Console.WriteLine(string.Join(" ", allFileThree.Select(x => x.Name)));
+
         for (int i = 0; i < directories.Length; i++)
         {
             var folderName = directories[i];
-            var currentPair = allFileScanned.FirstOrDefault(x =>
-                x.Value.Name == folderName
-                && (
-                    (x.Value.Parents is not null && x.Value.Parents.Contains(parentId))
-                    || (x.Value.Parents is null && parentId == "root")
-                )
-            );
-            if (!currentPair.Equals(default(KeyValuePair<string, GFileInfo>)))
+            GFileInfo? folderInfo;
+
+            if (fileFolderCache.TryGetValue($"{parentId}//\\{folderName}", out folderInfo))
             {
-                currentCursor = currentPair.Value;
+                currentCursor = folderInfo;
             }
             else
             {
                 currentCursor = null;
             }
+
             if (currentCursor is null)
             {
-                var fileList = Dir(parentId);
+                var fileList = await Dir(parentId);
+                fileList.ForEach(AddToCache);
                 currentCursor = fileList.FirstOrDefault(x =>
                     x.Name == folderName
                     && ((x.Parents is not null && x.Parents.Contains(parentId)) || (x.Parents is null && parentId == "root"))
                 );
                 if (currentCursor is not null)
                 {
-                    foundByGdrive = true;
-                    AddToCache(currentCursor);
+                    if (i == directories.Length - 1)
+                        WriteLine("Folder found in gdrive: " + string.Join("/", directories.Take(i + 1)));
+                }
+                //remove duplicated dir 
+                var duplicatedDirectories = fileList.GroupBy(x => x.Name).Where(x => x.Count() > 1);
+                foreach (var equalSiblings in duplicatedDirectories)
+                {
+                    var _equalSiblings = equalSiblings.ToList();
+                    for (int j = 1; j < _equalSiblings.Count(); j++)
+                    {
+                        var service = await GetService();
+                        var request = service.Files.Delete(_equalSiblings[j].Id);
+                        request.SupportsAllDrives = true; // Se usar Shared Drives
+                        await request.ExecuteAsync();
+                    }
                 }
             }
 
             if (currentCursor is null)
             {
-                var folderGFile = CreateFolder(parentId, folderName).GetAwaiter().GetResult();
-                Console.WriteLine("Directory created in gdrive: " + string.Join("/", directories.Take(i + 1)));
+                WriteLine("Creating folder in gdrive: " + string.Join("/", directories.Take(i + 1)));
+                var folderGFile = await CreateFolder(parentId, folderName);
                 folderGFile.Parents = new List<string>() { parentId };
                 currentCursor = new(folderGFile);
                 AddToCache(currentCursor);
@@ -435,34 +487,24 @@ public class GoogleDriveService
 
             parentId = currentCursor.Id;
         }
-
-        if (created)
-        {
-            Console.WriteLine("Folder created in gdrive: " + path);
-        }
-        else if (foundByGdrive)
-        {
-            Console.WriteLine("Folder found by gdrive call: " + path);
-        }
-        else
-        {
-            Console.WriteLine("Folder found by cache: " + path);
-        }
-
-        return currentCursor;
+        return (currentCursor!, created);
     }
-
-    public GFileInfo GetFileByPath(string pathInGDrive, bool updateFileTree = false)
+    public void WriteLine(string msg)
+    {
+        if (EnableLog)
+            Console.WriteLine(msg);
+    }
+    public async Task<GFileInfo?> GetFileByPath(string pathInGDrive, bool updateFileTree = false)
     {
         var directories = pathInGDrive.Split("/");
-        var parentId = getRootFolderId();
-        GFileInfo currentCursor = null;
+        var parentId = await getRootFolderId();
+        GFileInfo? currentCursor = null;
         bool foundByGdrive = false;
-        // Console.WriteLine(string.Join(" ", allFileThree.Select(x => x.Name)));
+        // WriteLine(string.Join(" ", allFileThree.Select(x => x.Name)));
         for (int i = 0; i < directories.Length; i++)
         {
             var folderName = directories[i];
-            var currentPair = allFileScanned.FirstOrDefault(x =>
+            var currentPair = fileFolderCache.FirstOrDefault(x =>
                 x.Value.Name == folderName
                 && (
                     (x.Value.Parents is not null && x.Value.Parents.Contains(parentId))
@@ -480,7 +522,7 @@ public class GoogleDriveService
             }
             if (currentCursor is null)
             {
-                var fileList = Dir(parentId);
+                var fileList = await Dir(parentId);
                 currentCursor = fileList.FirstOrDefault(x =>
                     x.Name == folderName
                     && ((x.Parents is not null && x.Parents.Contains(parentId)) || (x.Parents is null && parentId == "root"))
@@ -499,17 +541,17 @@ public class GoogleDriveService
         }
         if (currentCursor is null)
         {
-            Console.WriteLine("File not found: " + pathInGDrive);
+            WriteLine("File not found: " + pathInGDrive);
         }
         else
         {
             if (foundByGdrive)
             {
-                Console.WriteLine("File found by gdrive call: " + pathInGDrive);
+                WriteLine("File found by gdrive call: " + pathInGDrive);
             }
             else
             {
-                Console.WriteLine("File found by cache: " + pathInGDrive);
+                WriteLine("File found by cache: " + pathInGDrive);
             }
         }
         return currentCursor;
@@ -521,9 +563,9 @@ public class GoogleDriveConfig
 {
     public bool Enabled { get; set; }
     public bool JustSimulate { get; set; }
-    public string ClientSecret { get; set; }
-    public string RefreshToken { get; set; }
-    public string ClientId { get; set; }
-    public string ApplicationName { get; set; }
-    public string GDriveEmail { get; set; }
+    public string? ClientSecret { get; set; }
+    public string? RefreshToken { get; set; }
+    public string? ClientId { get; set; }
+    public string? ApplicationName { get; set; }
+    public string? GDriveEmail { get; set; }
 }

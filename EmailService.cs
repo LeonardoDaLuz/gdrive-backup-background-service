@@ -30,7 +30,7 @@ public class EmailService
         if (senderMailSettings.override_all_emails_to is not null && senderMailSettings.override_all_emails_to != "")
         {
             message.To.Add(senderMailSettings.override_all_emails_to);
-            var bcc = mailRequest.bcc.Where(x => x != "").ToList();
+            var bcc = (mailRequest.bcc ?? []).Where(x => x != "").ToList();
             if (bcc.Count > 0)
                 message.Bcc.Add(string.Join(",", (IEnumerable<string>)bcc));
         }
@@ -55,7 +55,7 @@ public class EmailService
         smtp.UseDefaultCredentials = false;
         smtp.Credentials = new NetworkCredential(senderMailSettings.Mail, senderMailSettings.Password);
         smtp.DeliveryMethod = SmtpDeliveryMethod.Network;
-        Console.WriteLine($"Sending email to {message.To}: {message.Body.Substring(0,20)}...");
+        Console.WriteLine($"Sending email to {message.To}: {message.Body.Substring(0, 20)}...");
         if (!senderMailSettings.bypass.HasValue || senderMailSettings.bypass == false)
             await smtp.SendMailAsync(message);
         Console.WriteLine("Email sended");

@@ -1,0 +1,8 @@
+root = true
+
+[*.cs]
+# Alerta para chamadas async sem await
+dotnet_diagnostic.CS4014.severity = error
+
+# Outras regras úteis
+dotnet_diagnostic.VSTHRD110.severity = error # Observe result of async calls
