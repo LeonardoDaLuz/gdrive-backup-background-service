@@ -244,7 +244,7 @@ public class GdriveBackgroundService : BackgroundService
     }
     async Task BackupDirectory(FileDirectoryOriginTarget task)
     {
-        GoogleDriveService.EnableLog = true;
+       // GoogleDriveService.EnableLog = true;
         //await gDriveService.CacheAllDir(); //muito lento
         var parentFolder = await SyncDirectories(task.TargetFolder!, task.Origin!);
         await SendEmail(task, parentFolder.file, true);
