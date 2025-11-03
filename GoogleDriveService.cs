@@ -421,7 +421,7 @@ public class GoogleDriveService
         }
     }
 
-    public async Task<(GFileInfo fileInfo, bool created)> GetOrCreateFolderIfNotExistsByPath(string path, bool updateFileTree = false)
+    public async Task<(GFileInfo fileInfo, bool created, List<string> DeletedDuplicatedFolders)> GetOrCreateFolderIfNotExistsByPath(string path, bool updateFileTree = false)
     {
         if (path.StartsWith("/"))
             path = path.Substring(1);
@@ -432,7 +432,7 @@ public class GoogleDriveService
 
         GFileInfo? currentCursor = null;
         bool created = false;
-
+        var DeletedDuplicatedFolders = new List<string>();
         for (int i = 0; i < directories.Length; i++)
         {
             var folderName = directories[i];
@@ -468,6 +468,7 @@ public class GoogleDriveService
                     for (int j = 1; j < _equalSiblings.Count(); j++)
                     {
                         var service = await GetService();
+                        DeletedDuplicatedFolders.Add(_equalSiblings[j].Name);
                         var request = service.Files.Delete(_equalSiblings[j].Id);
                         request.SupportsAllDrives = true; // Se usar Shared Drives
                         await request.ExecuteAsync();
@@ -487,7 +488,7 @@ public class GoogleDriveService
 
             parentId = currentCursor.Id;
         }
-        return (currentCursor!, created);
+        return (currentCursor!, created, DeletedDuplicatedFolders);
     }
     public void WriteLine(string msg)
     {

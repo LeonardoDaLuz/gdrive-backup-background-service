@@ -271,6 +271,10 @@ public class GdriveBackgroundService : BackgroundService
         else
             Console.WriteLine($"{new string(' ', identation)} Found directory on Gdrive: {rootDirInGdrive}");
 
+        if (parentFolderResult.DeletedDuplicatedFolders.Count > 0)
+        {
+            parentFolderResult.DeletedDuplicatedFolders.ForEach(x => Console.WriteLine($"{new string(' ', identation)} Duplicated folder deleted on Gdrive: {rootDirInGdrive}"));
+        }
         foreach (var fileName in fileList)
         {
             var filePathInDrive = $"{rootDirInGdrive}/{fileName}";
